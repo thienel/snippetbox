@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"thienel/lets-go/internal/models"
+	"unicode/utf8"
 
 	"github.com/julienschmidt/httprouter"
 )
@@ -54,20 +56,70 @@ func (app *application) snippetView(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *application) snippetCreate(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Display the form for creating a new snippet..."))
+	data := app.newTemplateData(r)
+	data.Form = snippetCreateForm{
+		Expires: 365,
+	}
+
+	app.render(w, http.StatusOK, "create.html", data)
+}
+
+type snippetCreateForm struct {
+	Title       string
+	Content     string
+	Expires     int
+	FieldErrors map[string]string
 }
 
 func (app *application) snippetCreatePost(w http.ResponseWriter, r *http.Request) {
 
-	title := "0 snail"
-	content := "0 snail\nClimb Mount Fuji,\nBut slowly, slowly!\n\n- Kobayashi Issa"
-	expires := 7
+	err := r.ParseForm()
+	if err != nil {
+		app.clientError(w, http.StatusBadRequest)
+		return
+	}
 
-	id, err := app.snippets.Insert(title, content, expires)
+	title := r.PostForm.Get("title")
+	content := r.PostForm.Get("content")
+	expires, err := strconv.Atoi(r.PostForm.Get("expires"))
+	if err != nil {
+		app.clientError(w, http.StatusBadRequest)
+		return
+	}
+
+	form := snippetCreateForm{
+		Title:       r.PostForm["title"][0],
+		Content:     r.PostForm["content"][0],
+		Expires:     expires,
+		FieldErrors: map[string]string{},
+	}
+
+	if strings.TrimSpace(title) == "" {
+		form.FieldErrors["title"] = "This field cannot be blank"
+	} else if utf8.RuneCountInString(title) > 100 {
+		form.FieldErrors["title"] = "This field cannot be more than 100 characters long"
+	}
+
+	if strings.TrimSpace(content) == "" {
+		form.FieldErrors["content"] = "This field cannot be blank"
+	}
+
+	if expires != 1 && expires != 7 && expires != 365 {
+		form.FieldErrors["expires"] = "This field must equa 1, 7 or 165"
+	}
+
+	if len(form.FieldErrors) > 0 {
+		data := app.newTemplateData(r)
+		data.Form = form
+		app.render(w, http.StatusUnprocessableEntity, "create.html", data)
+		return
+	}
+
+	id, err := app.snippets.Insert(form.Title, form.Content, form.Expires)
 	if err != nil {
 		app.serverError(w, err)
 		return
 	}
 
-	http.Redirect(w, r, fmt.Sprintf("/snippet/view/id=%d", id), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/snippet/view/%d", id), http.StatusSeeOther)
 }
