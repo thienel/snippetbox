@@ -16,7 +16,7 @@
         <header>
             <h1><a href='/'>Snippetbox</a></h1>
         </header>
-        {{template "nav"}}
+        {{template "nav" .}}
         <main>
             {{with .Flash}}
                 <div class="flash">{{.}}</div>
