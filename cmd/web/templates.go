@@ -48,7 +48,10 @@ func newTemplateCache() (map[string]*template.Template, error) {
 }
 
 func humanDate(t time.Time) string {
-	return t.Format("02 Jan 2005 at 15:04")
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format("02 Jan 2006 at 15:04")
 }
 
 var functions = template.FuncMap{
