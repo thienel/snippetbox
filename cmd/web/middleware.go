@@ -73,10 +73,6 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if id == 0 {
-			next.ServeHTTP(w, r)
-			return
-		}
 
 		exists, err := app.users.Exists(id)
 		if err != nil {
