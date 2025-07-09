@@ -191,3 +191,118 @@ func TestUserSignup(t *testing.T) {
 		})
 	}
 }
+
+func TestSnippetCreate(t *testing.T) {
+	app := newTestApplication(t)
+	ts := newTestServer(t, app.routes())
+	defer ts.Close()
+
+	t.Run("Unauthenticated", func(t *testing.T) {
+		code, header, _ := ts.get(t, "/snippet/create")
+
+		assert.Equal(t, code, http.StatusSeeOther)
+		assert.Equal(t, header.Get("Location"), "/user/login")
+	})
+
+	validCSRFToken := ""
+
+	t.Run("Authenticated", func(t *testing.T) {
+		_, _, body := ts.get(t, "/user/login")
+		validCSRFToken = extractCSRFToken(t, body)
+
+		form := url.Values{}
+		form.Add("email", "alice@example.com")
+		form.Add("password", "pa$$word")
+		form.Add("csrf_token", validCSRFToken)
+
+		ts.postForm(t, "/user/login", form)
+
+		code, _, body := ts.get(t, "/snippet/create")
+		assert.Equal(t, code, http.StatusOK)
+		assert.StringContains(t, body, `<form action="/snippet/create" method="POST">`)
+	})
+
+	const (
+		validTitle   = "Valid title"
+		validContent = "Valid content"
+		validExpires = "7"
+	)
+
+	tests := []struct {
+		name           string
+		snippetTitle   string
+		snippetContent string
+		snippetExpires string
+		csrfToken      string
+		wantCode       int
+		wantLocation   string
+	}{
+		{
+			name:           "Valid submission",
+			snippetTitle:   validTitle,
+			snippetContent: validContent,
+			snippetExpires: validExpires,
+			csrfToken:      validCSRFToken,
+			wantCode:       http.StatusSeeOther,
+			wantLocation:   "/snippet/view",
+		},
+		{
+			name:           "Invalid CSRF Token",
+			snippetTitle:   validTitle,
+			snippetContent: validContent,
+			snippetExpires: validExpires,
+			csrfToken:      "Invalid token",
+			wantCode:       http.StatusSeeOther,
+		},
+		{
+			name:           "Title blank",
+			snippetTitle:   "",
+			snippetContent: validContent,
+			snippetExpires: validExpires,
+			csrfToken:      validCSRFToken,
+			wantCode:       http.StatusUnprocessableEntity,
+		},
+		{
+			name:           "Title exceeds limit characters",
+			snippetTitle:   "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789" + "1",
+			snippetContent: validContent,
+			snippetExpires: validExpires,
+			csrfToken:      validCSRFToken,
+			wantCode:       http.StatusUnprocessableEntity,
+		},
+		{
+			name:           "Content blank",
+			snippetTitle:   validTitle,
+			snippetContent: "",
+			snippetExpires: validExpires,
+			csrfToken:      validCSRFToken,
+			wantCode:       http.StatusUnprocessableEntity,
+		},
+		{
+			name:           "Invalid expires",
+			snippetTitle:   validTitle,
+			snippetContent: validContent,
+			snippetExpires: "0",
+			csrfToken:      validCSRFToken,
+			wantCode:       http.StatusUnprocessableEntity,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			form := url.Values{}
+			form.Add("title", tt.snippetTitle)
+			form.Add("content", tt.snippetContent)
+			form.Add("expires", tt.snippetExpires)
+			form.Add("csrf_token", validCSRFToken)
+
+			code, header, _ := ts.postForm(t, "/snippet/create", form)
+
+			assert.Equal(t, code, tt.wantCode)
+
+			if tt.wantLocation != "" {
+				assert.StringContains(t, header.Get("Location"), tt.wantLocation)
+			}
+		})
+	}
+}
