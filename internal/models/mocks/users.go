@@ -1,6 +1,9 @@
 package mocks
 
-import "thienel/lets-go/internal/models"
+import (
+	"thienel/lets-go/internal/models"
+	"time"
+)
 
 type UserModel struct{}
 
@@ -28,4 +31,17 @@ func (m *UserModel) Exists(id int) (bool, error) {
 	default:
 		return false, nil
 	}
+}
+
+func (m *UserModel) Get(id int) (*models.User, error) {
+	if id == 1 {
+		return &models.User{
+			Id:      1,
+			Name:    "Alice",
+			Email:   "alice@email.com",
+			Created: time.Now(),
+		}, nil
+	}
+
+	return nil, models.ErrNoRecord
 }
