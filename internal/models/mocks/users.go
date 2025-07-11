@@ -45,3 +45,11 @@ func (m *UserModel) Get(id int) (*models.User, error) {
 
 	return nil, models.ErrNoRecord
 }
+
+func (m *UserModel) IsCorrectPassword(id int, password string) error {
+	return nil
+}
+
+func (m *UserModel) ChangePassword(id int, password string) error {
+	return nil
+}

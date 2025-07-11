@@ -15,6 +15,8 @@ type UserModelInterface interface {
 	Authenticate(email, password string) (int, error)
 	Exists(id int) (bool, error)
 	Get(id int) (*User, error)
+	IsCorrectPassword(id int, password string) error
+	ChangePassword(id int, password string) error
 }
 
 type User struct {
@@ -78,6 +80,54 @@ func (m *UserModel) Authenticate(email, password string) (int, error) {
 	}
 
 	return id, nil
+}
+
+func (m *UserModel) IsCorrectPassword(id int, password string) error {
+	var user User
+
+	stmt := "SELECT id, hashed_password FROM users WHERE id = ?"
+
+	err := m.DB.QueryRow(stmt, id).Scan(&user.Id, &user.HashedPassword)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNoRecord
+		}
+		return err
+	}
+
+	err = bcrypt.CompareHashAndPassword(user.HashedPassword, []byte(password))
+	if err != nil {
+		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			return ErrInvalidCredentials
+		}
+		return err
+	}
+
+	return nil
+}
+
+func (m *UserModel) ChangePassword(id int, password string) error {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), 12)
+	if err != nil {
+		return err
+	}
+
+	stmt := "UPDATE users SET hashed_password = ? WHERE id = ?"
+	result, err := m.DB.Exec(stmt, hashedPassword, id)
+	if err != nil {
+		return err
+	}
+
+	affectedRows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if affectedRows == 0 {
+		return ErrNoRecord
+	}
+
+	return nil
 }
 
 func (m *UserModel) Exists(id int) (bool, error) {

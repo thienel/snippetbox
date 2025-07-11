@@ -63,6 +63,10 @@ func Matches(value string, rx *regexp.Regexp) bool {
 	return rx.MatchString(value)
 }
 
+func IsSame(value, compareValue string) bool {
+	return value == compareValue
+}
+
 func (v *Validator) AddNonFieldError(message string) {
 	v.NonFieldErrors = append(v.NonFieldErrors, message)
 }

@@ -219,6 +219,12 @@ func (app *application) userLoginPost(w http.ResponseWriter, r *http.Request) {
 	app.sessionManager.Put(r.Context(), "authenticatedUserID", id)
 	app.sessionManager.Put(r.Context(), "flash", "You've been logged in successfully")
 
+	path := app.sessionManager.PopString(r.Context(), "redirectPathAfterLogin")
+
+	if path != "" {
+		http.Redirect(w, r, path, http.StatusSeeOther)
+		return
+	}
 	http.Redirect(w, r, "/snippet/create", http.StatusSeeOther)
 }
 
@@ -261,4 +267,75 @@ func (app *application) account(w http.ResponseWriter, r *http.Request) {
 	data.Account = user
 
 	app.render(w, http.StatusOK, "account.html", data)
+}
+
+type changePasswordForm struct {
+	CurrentPassword     string `form:"currentPassword"`
+	NewPassword         string `form:"newPassword"`
+	ConfirmNewPassword  string `form:"confirmNewPassword"`
+	validator.Validator `form:"-"`
+}
+
+func (app *application) passwordUpdate(w http.ResponseWriter, r *http.Request) {
+	data := app.newTemplateData(r)
+	data.Form = changePasswordForm{}
+
+	app.render(w, http.StatusOK, "changePassword.html", data)
+}
+
+func (app *application) passowrdUpdatePost(w http.ResponseWriter, r *http.Request) {
+	var form changePasswordForm
+
+	err := app.decodePostForm(r, &form)
+	if err != nil {
+		app.clientError(w, http.StatusBadRequest)
+		return
+	}
+
+	userId := app.sessionManager.GetInt(r.Context(), "authenticatedUserID")
+	_, err = app.users.Exists(userId)
+	if err != nil {
+		if errors.Is(err, models.ErrNoRecord) {
+			http.Redirect(w, r, "/user/login", http.StatusSeeOther)
+		}
+	}
+
+	if validator.NotBlank(form.CurrentPassword) {
+		err = app.users.IsCorrectPassword(userId, form.CurrentPassword)
+		if err != nil {
+			if errors.Is(err, models.ErrInvalidCredentials) {
+				form.AddFieldError("currentPassword", "Current password is not correct")
+			} else {
+				app.serverError(w, err)
+				return
+			}
+		}
+	} else {
+		form.AddFieldError("currentPassword", "Current password can not be empty")
+	}
+	form.CheckField(validator.NotBlank(form.CurrentPassword), "currentPassword",
+		"Current password can not be empty")
+	form.CheckField(validator.NotBlank(form.NewPassword), "newPassword",
+		"New password can not be empty")
+	form.CheckField(validator.Minchars(form.NewPassword, 8), "newPassword",
+		"New password must be at least 8 characters")
+	form.CheckField(validator.NotBlank(form.ConfirmNewPassword), "confirmNewPassword",
+		"Confirm new password can not be empty")
+	form.CheckField(validator.IsSame(form.NewPassword, form.ConfirmNewPassword),
+		"confirmNewPassword", "Password is not match")
+
+	if !form.Valid() {
+		data := app.newTemplateData(r)
+		data.Form = form
+		app.render(w, http.StatusUnprocessableEntity, "changePassword.html", data)
+		return
+	}
+
+	err = app.users.ChangePassword(userId, form.NewPassword)
+	if err != nil {
+		app.serverError(w, err)
+	}
+
+	app.sessionManager.Put(r.Context(), "flash", "Change password successfully")
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
